@@ -28,21 +28,26 @@ jobs:
       - name: Install the preserved dependency profile
         run: npm ci --legacy-peer-deps --ignore-scripts --no-audit --no-fund
       - name: Install the pinned CI reporter without changing manifests
-        run: npm install --no-save --package-lock=false --legacy-peer-deps --ignore-scripts --no-audit --no-fund jest-junit@16.0.0
+        run: |
+          sha256sum node_modules/.package-lock.json > "$RUNNER_TEMP/relay-dependencies.sha256"
+          npm install --prefix "$RUNNER_TEMP/relay-reporter" --ignore-scripts --no-audit --no-fund jest-junit@16.0.0
+          sha256sum -c "$RUNNER_TEMP/relay-dependencies.sha256"
       - name: Build
         run: npm run build
       - name: Unit tests
         if: ${{ !cancelled() }}
         env:
+          RELAY_JUNIT_REPORTER: ${{ runner.temp }}/relay-reporter/node_modules/jest-junit/index.js
           JEST_JUNIT_OUTPUT_DIR: reports
           JEST_JUNIT_OUTPUT_NAME: unit.xml
-        run: npm test -- --runInBand --ci --reporters=default --reporters=jest-junit
+        run: npm test -- --runInBand --ci --reporters=default --reporters="$RELAY_JUNIT_REPORTER"
       - name: Integration tests
         if: ${{ !cancelled() }}
         env:
+          RELAY_JUNIT_REPORTER: ${{ runner.temp }}/relay-reporter/node_modules/jest-junit/index.js
           JEST_JUNIT_OUTPUT_DIR: reports
           JEST_JUNIT_OUTPUT_NAME: integration.xml
-        run: npm run test:e2e -- --runInBand --ci --reporters=default --reporters=jest-junit
+        run: npm run test:e2e -- --runInBand --ci --reporters=default --reporters="$RELAY_JUNIT_REPORTER"
       - name: Preserve actual test reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
