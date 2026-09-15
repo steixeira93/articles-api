@@ -1,0 +1,53 @@
+name: Relay validation
+
+on:
+  push:
+    branches: [relay/validation-20260915]
+  pull_request:
+    branches: [relay/validation-20260915]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: relay-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 22.23.2
+          cache: npm
+      - name: Install the preserved dependency profile
+        run: npm ci --legacy-peer-deps --ignore-scripts --no-audit --no-fund
+      - name: Install the pinned CI reporter without changing manifests
+        run: npm install --no-save --package-lock=false --legacy-peer-deps --ignore-scripts --no-audit --no-fund jest-junit@16.0.0
+      - name: Build
+        run: npm run build
+      - name: Unit tests
+        if: ${{ !cancelled() }}
+        env:
+          JEST_JUNIT_OUTPUT_DIR: reports
+          JEST_JUNIT_OUTPUT_NAME: unit.xml
+        run: npm test -- --runInBand --ci --reporters=default --reporters=jest-junit
+      - name: Integration tests
+        if: ${{ !cancelled() }}
+        env:
+          JEST_JUNIT_OUTPUT_DIR: reports
+          JEST_JUNIT_OUTPUT_NAME: integration.xml
+        run: npm run test:e2e -- --runInBand --ci --reporters=default --reporters=jest-junit
+      - name: Preserve actual test reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: relay-quality
+          path: reports/*.xml
+          if-no-files-found: warn
+          retention-days: 7
